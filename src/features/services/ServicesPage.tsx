@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Terminal,
   Activity,
-  Box,
   File,
   HardDrive,
 } from "lucide-react";
@@ -24,7 +23,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Card,

@@ -11,7 +11,6 @@ import {
   runWorkflow,
   archiveWorkflow,
   getAvailableDatabases,
-  type Workflow,
 } from '@/services/workflow.service';
 
 /**

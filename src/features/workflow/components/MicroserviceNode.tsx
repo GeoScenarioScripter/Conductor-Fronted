@@ -85,43 +85,32 @@ export const MicroserviceNode = memo(({ data, selected }: NodeProps) => {
           </div>
         )}
 
-        {/* Interfaces */}
-        <div className="flex justify-between gap-4">
-          {/* Inputs */}
-          <div className="space-y-3 flex-1">
-            {nodeData.inputs?.map((input) => (
-              <div key={input.id} className="relative flex items-center">
-                <Handle
-                  type="target"
-                  position={Position.Left}
-                  id={input.id}
-                  className="!w-2 !h-2 !bg-primary !border-none transition-transform hover:scale-150"
-                />
-                <span className="ml-3 text-[10px] text-muted-foreground font-mono">
-                  {input.name}
-                </span>
-              </div>
-            ))}
+        {/* Connection Points */}
+        <div className="flex justify-between items-center">
+          {/* Input Handle */}
+          <div className="relative">
+            <Handle
+              type="target"
+              position={Position.Left}
+              id="input"
+              className="!w-3 !h-3 !bg-primary !border-2 !border-background transition-transform hover:scale-125"
+            />
+            <span className="absolute left-6 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground whitespace-nowrap">
+              输入
+            </span>
           </div>
 
-          {/* Outputs */}
-          <div className="space-y-3 flex-1 flex flex-col items-end">
-            {nodeData.outputs?.map((output) => (
-              <div
-                key={output.id}
-                className="relative flex items-center justify-end"
-              >
-                <span className="mr-3 text-[10px] text-muted-foreground font-mono">
-                  {output.name}
-                </span>
-                <Handle
-                  type="source"
-                  position={Position.Right}
-                  id={output.id}
-                  className="!w-2 !h-2 !bg-secondary !border-none transition-transform hover:scale-150"
-                />
-              </div>
-            ))}
+          {/* Output Handle */}
+          <div className="relative">
+            <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground whitespace-nowrap">
+              输出
+            </span>
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="output"
+              className="!w-3 !h-3 !bg-secondary !border-2 !border-background transition-transform hover:scale-125"
+            />
           </div>
         </div>
       </div>

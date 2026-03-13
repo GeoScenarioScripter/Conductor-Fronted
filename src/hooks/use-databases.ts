@@ -9,7 +9,7 @@ import {
   uploadDatabase,
   deleteDatabase,
   updateDatabaseData,
-  type DatabaseItem,
+  
   type DatabaseRecord,
   type UploadDatabaseParams,
 } from '@/services/database.service';

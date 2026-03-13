@@ -9,6 +9,8 @@ export interface ServiceInterface {
 export interface MicroserviceNodeData extends Record<string, unknown> {
   label: string;
   serviceName?: string; // Added service name
+  appName?: string; // 应用名称
+  methodName?: string; // 方法名称
   description?: string;
   inputs: ServiceInterface[];
   outputs: ServiceInterface[];
