@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
-import WorkflowPage from "@/features/workflow/WorkflowPage";
+import WorkflowListPage from "@/features/workflow/WorkflowListPage";
+import WorkflowEditorPage from "@/features/workflow/WorkflowEditorPage";
 import UploadPage from "@/features/upload/UploadPage";
 import ServicesPage from "@/features/services/ServicesPage";
 import DatabasePage from "@/features/database/DatabasePage";
@@ -15,7 +16,9 @@ function App() {
         <Routes>
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Navigate to="/workflow" replace />} />
-            <Route path="workflow" element={<WorkflowPage />} />
+            <Route path="workflow" element={<WorkflowListPage />} />
+            <Route path="workflow/new" element={<WorkflowEditorPage />} />
+            <Route path="workflow/:id/edit" element={<WorkflowEditorPage />} />
             <Route path="upload" element={<UploadPage />} />
             <Route path="services" element={<ServicesPage />} />
             <Route path="database" element={<DatabasePage />} />

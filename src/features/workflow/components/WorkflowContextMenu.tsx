@@ -41,14 +41,14 @@ export const WorkflowContextMenu = ({
       <div className="p-1">
         <div
           onClick={onCopy}
-          className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer"
+          className="relative flex select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer"
         >
           <Copy className="mr-2 h-4 w-4" />
           <span>Copy Node</span>
         </div>
         <div
           onClick={onEditDescription}
-          className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer"
+          className="relative flex select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer"
         >
           <FileText className="mr-2 h-4 w-4" />
           <span>Edit Description</span>
@@ -56,7 +56,7 @@ export const WorkflowContextMenu = ({
         <div className="h-px my-1 bg-muted" />
         <div
           onClick={onDelete}
-          className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-destructive/10 hover:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer"
+          className="relative flex select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-destructive/10 hover:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer"
         >
           <Trash2 className="mr-2 h-4 w-4" />
           <span>Delete Node</span>

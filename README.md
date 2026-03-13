@@ -7,7 +7,7 @@
 
 ### 核心功能
 
-1. **微服务工作流编排 (Workflow)**：可视化拖拽编排微服务节点，配置输入输出接口连接，支持模拟运行。
+1. **工作流管理 (Workflow)**：工作流列表管理（卡片视图）+ 可视化拖拽编排画布，支持创建、编辑、查看详情及接口地址复制。
 2. **微服务管理 (Services)**：查看与管理微服务状态、版本、类型及关联数据库。
 3. **数据库治理 (Database)**：管理数据库文件，提供数据预览、上传与类型管理 (PostgreSQL, MySQL, SQLite 等)。
 4. **微应用管理 (Apps)**：将多个微服务组合为微应用，支持导出部署配置 (Docker/K8s)。
@@ -44,10 +44,11 @@ src/
   │   │   └── ServicesPage.tsx
   │   ├── upload/          # 资源上传模块
   │   │   └── UploadPage.tsx
-  │   └── workflow/        # 工作流编排模块
+  │   └── workflow/        # 工作流管理模块
   │       ├── components/  # 工作流特定组件 (Node, Sidebar, ContextMenu)
-  │       ├── types/       # 类型定义
-  │       └── WorkflowPage.tsx
+  │       ├── types/       # 类型定义 (WorkflowSummary, WorkflowStatus, etc.)
+  │       ├── WorkflowListPage.tsx   # 工作流列表管理页 (/workflow)
+  │       └── WorkflowEditorPage.tsx # 工作流编排画布 (/workflow/new, /workflow/:id/edit)
   ├── lib/                 # 工具函数 (utils.ts)
   ├── assets/              # 静态资源
   ├── App.tsx              # 路由配置与应用入口
@@ -56,14 +57,23 @@ src/
 
 ## 4. 详细功能说明
 
-### 4.1 工作流编排 (Workflow)
+### 4.1 工作流管理 (Workflow)
 
 - **位置**: `src/features/workflow`
-- **功能**:
+- **路由**:
+  - `/workflow` → `WorkflowListPage` — 工作流列表卡片视图
+  - `/workflow/new` → `WorkflowEditorPage` — 新建工作流画布
+  - `/workflow/:id/edit` → `WorkflowEditorPage` — 编辑已有工作流
+- **列表页功能** (`WorkflowListPage`):
+  - 卡片网格展示所有工作流，显示名称、状态 (active / draft / archived)、节点数、最近更新时间。
+  - 虚线边框"新建工作流"卡片，点击跳转至创建画布。
+  - 每张卡片提供：**Edit**（跳转画布编辑）、**Details**（详情弹窗）、**Copy URL**（复制接口基础地址）。
+- **编辑页功能** (`WorkflowEditorPage`):
   - 基于 `React Flow` 的画布交互。
   - 自定义 `MicroserviceNode` 支持多端口连接。
   - 侧边栏拖拽添加节点。
   - 状态模拟：Idle -> Running -> Success/Error。
+  - 标题根据路由参数动态显示（新建 vs 编辑模式）。
 
 ### 4.2 微服务管理 (Services)
 

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import {
   ReactFlow,
   MiniMap,
@@ -121,7 +122,8 @@ const ActionButton = ({
   </button>
 );
 
-export default function WorkflowPage() {
+export default function WorkflowEditorPage() {
+  const { id } = useParams<{ id?: string }>();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -480,7 +482,7 @@ export default function WorkflowPage() {
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
             Workflow:{" "}
-            <span className="text-foreground font-medium">New Workflow 01</span>
+            <span className="text-foreground font-medium">{id ? `Workflow ${id.slice(0, 8)}` : "New Workflow"}</span>
           </span>
         </div>
         <div className="flex items-center gap-3">

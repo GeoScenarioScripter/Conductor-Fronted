@@ -1,5 +1,19 @@
 export type NodeStatus = 'idle' | 'running' | 'success' | 'error' | 'warning';
 
+export type WorkflowStatus = 'active' | 'draft' | 'archived';
+
+export interface WorkflowSummary {
+  id: string;
+  name: string;
+  description: string;
+  status: WorkflowStatus;
+  nodeCount: number;
+  createdAt: string;
+  updatedAt: string;
+  baseUrl: string;
+  thumbnail: string;
+}
+
 export interface ServiceInterface {
   id: string;
   name: string;
