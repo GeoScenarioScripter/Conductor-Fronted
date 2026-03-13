@@ -10,7 +10,7 @@ import {
   toggleServiceStatus,
   restartContainer,
   getServiceLogs,
-  type Service,
+ 
   type UpdateServiceParams,
 } from '@/services/services.service';
 

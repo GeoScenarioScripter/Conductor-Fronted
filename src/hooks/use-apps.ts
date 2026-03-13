@@ -2,7 +2,7 @@
  * 微应用相关 React Query Hooks
  */
 import { useQuery } from '@tanstack/react-query';
-import { getApps, getAppById, type MicroApp } from '@/services/apps.service';
+import { getApps, getAppById } from '@/services/apps.service';
 
 /**
  * 获取微应用列表
