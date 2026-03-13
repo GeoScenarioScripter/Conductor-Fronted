@@ -14,7 +14,6 @@ import {
   Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
@@ -126,10 +125,11 @@ export default function AppsPage() {
               className={`h-40 w-full ${app.thumbnail} relative overflow-hidden`}
             >
               <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-all duration-500" />
-              <div className="absolute top-4 right-4 translate-x-12 group-hover:translate-x-0 transition-transform duration-300">
-                <Badge className="bg-white/90 text-black hover:bg-white cursor-default shadow-lg backdrop-blur-md">
+              <div className="absolute top-4 right-4 flex items-center gap-0 group-hover:gap-1.5 px-2 py-1 rounded-full bg-white/90 text-black shadow-lg backdrop-blur-md transition-all duration-300">
+                <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="overflow-hidden max-w-0 group-hover:max-w-[100px] text-xs font-semibold whitespace-nowrap transition-all duration-300">
                   Ready to Deploy
-                </Badge>
+                </span>
               </div>
               <div className="absolute bottom-0 left-0 p-6 w-full bg-gradient-to-t from-black/80 to-transparent">
                 <h3 className="text-white font-bold text-2xl tracking-tight drop-shadow-md mb-1">

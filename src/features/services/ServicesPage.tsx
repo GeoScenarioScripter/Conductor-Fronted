@@ -42,6 +42,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { UploadWizard } from "./components/UploadWizard";
 
 // Mock Data Source for Dropdown
 const availableDataSources = [
@@ -289,31 +290,41 @@ export default function ServicesPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-primary">
-            Microapplication Management
-          </h2>
-          <p className="text-muted-foreground">
-            Manage your uploaded microapplications and their configurations.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search microapplications..."
-              className="pl-8 w-[250px]"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        </div>
+    <div className="flex flex-col h-full gap-6">
+      <div>
+        <h2 className="text-3xl font-bold tracking-tight text-primary">
+          Microapplication Management
+        </h2>
+        <p className="text-muted-foreground">
+          Upload and manage your microapplications and their configurations.
+        </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {currentServices.map((service) => (
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row border border-border/50 rounded-xl overflow-hidden">
+        {/* Left: Upload Wizard */}
+        <div className="md:w-1/3 flex-shrink-0 p-6 bg-muted/20 border-b md:border-b-0 md:border-r border-border/50 overflow-y-auto">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Upload Microapplication</h3>
+          <UploadWizard />
+        </div>
+
+        {/* Right: Services List */}
+        <div className="flex-1 min-w-0 p-6 flex flex-col gap-4">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Registered Services</h3>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search microapplications..."
+                className="pl-8"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+          <div className="grid gap-4 md:grid-cols-2">
+            {currentServices.map((service) => (
           <Card
             key={service.id}
             className="backdrop-blur-sm bg-card/50 border-primary/20 hover:border-primary/50 transition-colors group cursor-pointer"
@@ -398,34 +409,38 @@ export default function ServicesPage() {
             </CardContent>
           </Card>
         ))}
-      </div>
-
-      {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-end space-x-2 py-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Previous
-          </Button>
-          <div className="text-sm font-medium">
-            Page {currentPage} of {totalPages}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-          >
-            Next
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+          </div>{/* end scroll area */}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-border/30">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="text-sm font-medium">
+                Page {currentPage} of {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>{/* end right column */}
+      </div>{/* end two-panel */}
+
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

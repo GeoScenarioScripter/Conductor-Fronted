@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ElementType } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Edit2,
@@ -11,6 +12,9 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
+  Archive,
+  PenLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -74,6 +78,12 @@ const statusColors: Record<WorkflowStatus, string> = {
   active: "bg-green-500/15 text-green-400 border border-green-500/30",
   draft: "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30",
   archived: "bg-muted/50 text-muted-foreground border border-border",
+};
+
+const statusIcons: Record<WorkflowStatus, ElementType> = {
+  active: CheckCircle2,
+  draft: PenLine,
+  archived: Archive,
 };
 
 const statusLabels: Record<WorkflowStatus, string> = {
@@ -142,11 +152,14 @@ export default function WorkflowListPage() {
             <div className={`h-36 w-full ${wf.thumbnail} relative overflow-hidden`}>
               <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-all duration-500" />
               {/* Status badge */}
-              <div className="absolute top-3 right-3 translate-x-12 group-hover:translate-x-0 transition-transform duration-300">
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusColors[wf.status]}`}>
+              {(() => { const Icon = statusIcons[wf.status]; return (
+              <div className={`absolute top-3 right-3 flex items-center gap-0 group-hover:gap-1.5 px-2 py-1 rounded-full backdrop-blur-sm transition-all duration-300 ${statusColors[wf.status]}`}>
+                <Icon className="h-3 w-3 flex-shrink-0" />
+                <span className="overflow-hidden max-w-0 group-hover:max-w-[80px] text-xs font-semibold whitespace-nowrap transition-all duration-300">
                   {statusLabels[wf.status]}
                 </span>
               </div>
+              ); })()}
               {/* Name + ID overlay */}
               <div className="absolute bottom-0 left-0 p-4 w-full bg-gradient-to-t from-black/80 to-transparent">
                 <h3 className="text-white font-bold text-lg tracking-tight drop-shadow-md">

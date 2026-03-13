@@ -2,7 +2,6 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Workflow,
-  Upload,
   Server,
   Database,
   AppWindow,
@@ -16,7 +15,6 @@ import { ModeToggle } from "@/components/mode-toggle";
 
 const navItems = [
   { path: "/workflow", label: "工作流管理", icon: Workflow },
-  { path: "/upload", label: "微应用上传", icon: Upload },
   { path: "/services", label: "微应用管理", icon: Server },
   { path: "/database", label: "数据库治理", icon: Database },
   { path: "/apps", label: "应用交付管理", icon: AppWindow },
