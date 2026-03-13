@@ -15,7 +15,7 @@ import { motion } from "framer-motion";
 import { ModeToggle } from "@/components/mode-toggle";
 
 const navItems = [
-  { path: "/workflow", label: "工作流编排", icon: Workflow },
+  { path: "/workflow", label: "工作流管理", icon: Workflow },
   { path: "/upload", label: "微应用上传", icon: Upload },
   { path: "/services", label: "微应用管理", icon: Server },
   { path: "/database", label: "数据库治理", icon: Database },
@@ -40,7 +40,7 @@ export function MainLayout() {
             <motion.span
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="ml-3 font-bold text-lg tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary"
+              className="ml-3 font-bold text-lg tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-primary to-slate-400 dark:to-secondary"
             >
               CONDUCTOR
             </motion.span>
@@ -56,7 +56,7 @@ export function MainLayout() {
                 cn(
                   "flex items-center px-3 py-3 rounded-md transition-all duration-300 group relative overflow-hidden",
                   isActive
-                    ? "text-primary-foreground bg-primary/10 border border-primary/20 shadow-[0_0_15px_rgba(0,240,255,0.3)]"
+                    ? "dark:text-white bg-sky-200/50  border border-primary/20 shadow-[0_0_15px_rgba(0,240,255,0.3)]"
                     : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 )
               }
@@ -66,7 +66,7 @@ export function MainLayout() {
                   {isActive && (
                     <motion.div
                       layoutId="activeNav"
-                      className="absolute inset-0 bg-primary/10 border-l-2 border-primary"
+                      className="absolute inset-0 bg-sky-200/50 border-l-2 border-primary"
                       initial={false}
                       transition={{
                         type: "spring",
@@ -111,14 +111,14 @@ export function MainLayout() {
       </motion.aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-background to-background">
+      <main className="flex-1 flex flex-col relative overflow-hidden from-slate-900 via-background to-background">
         <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]" />
 
         {/* Header */}
         <header className="h-16 border-b border-border/50 bg-background/50 backdrop-blur-sm flex items-center justify-between px-8 z-10">
           <div>
             <h2 className="text-xl font-semibold tracking-tight text-foreground/90">
-              {navItems.find((i) => i.path === location.pathname)?.label ||
+              {navItems.find((i) => location.pathname.startsWith(i.path))?.label ||
                 "Dashboard"}
             </h2>
             <p className="text-xs text-muted-foreground">
