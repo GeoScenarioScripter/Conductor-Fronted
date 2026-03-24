@@ -34,7 +34,59 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useMethodDetail } from "@/hooks/use-workflow-metadata";
 import type { ServiceInterface } from "./types";
-import { getMethodDetail } from "@/services/workflow-metadata.service";
+import { getMethodDetail, getServiceDetail } from "@/services/workflow-metadata.service";
+import { submitWorkflowDefinition } from "@/services/workflow.service";
+
+type FieldMapping = { sourceField: string; targetField: string };
+
+function extractLeafPathsFromParamTree(nodes: any[], parentPath = ""): string[] {
+  if (!nodes || nodes.length === 0) return [];
+
+  const paths: string[] = [];
+  for (let index = 0; index < nodes.length; index++) {
+    const node = nodes[index];
+    const simpleType =
+      typeof node?.type === "string"
+        ? (node.type as string).split(".").slice(-1)[0]
+        : undefined;
+    const name = node?.name || node?.fieldName || simpleType || `field_${index}`;
+    const path = parentPath ? `${parentPath}.${name}` : name;
+    const hasChildren = Array.isArray(node?.fields) && node.fields.length > 0;
+
+    if (hasChildren) {
+      paths.push(...extractLeafPathsFromParamTree(node.fields, path));
+    } else {
+      paths.push(path);
+    }
+  }
+  return paths;
+}
+
+function uniq<T>(arr: T[]): T[] {
+  return Array.from(new Set(arr));
+}
+
+function setByPath(obj: Record<string, any>, path: string, value: any) {
+  const parts = path.split(".").filter(Boolean);
+  let cur: any = obj;
+  parts.forEach((key, idx) => {
+    const isLast = idx === parts.length - 1;
+    if (isLast) {
+      cur[key] = value;
+    } else {
+      cur[key] = cur[key] && typeof cur[key] === "object" ? cur[key] : {};
+      cur = cur[key];
+    }
+  });
+}
+
+function toNodeKey(nodeData: any): string | null {
+  const appName = nodeData?.appName;
+  const serviceName = nodeData?.serviceName;
+  const methodName = nodeData?.methodName;
+  if (!appName || !serviceName || !methodName) return null;
+  return `${appName}.${serviceName}.${methodName}`;
+}
 
 // Define custom node types
 const nodeTypes = {
@@ -60,6 +112,7 @@ function CustomEdge({
     targetY,
     targetPosition,
   });
+  const explanation = (data as any)?.explanation;
 
   return (
     <>
@@ -77,7 +130,11 @@ function CustomEdge({
             onClick={() => {
               // 触发修改映射事件
               const event = new CustomEvent("editEdgeMapping", {
-                detail: { edgeId: id, mappings: data?.mappings || [] },
+                detail: {
+                  edgeId: id,
+                  mappings: data?.mappings || [],
+                  explanation: data?.explanation || "",
+                },
               });
               window.dispatchEvent(event);
             }}
@@ -86,6 +143,14 @@ function CustomEdge({
           >
             <Settings className="h-3 w-3" />
           </button>
+          {explanation ? (
+            <div
+              className="text-[10px] bg-background/70 border border-border/60 rounded px-1 py-[1px] max-w-[220px] truncate ml-2"
+              title={String(explanation)}
+            >
+              {String(explanation)}
+            </div>
+          ) : null}
         </div>
       </EdgeLabelRenderer>
     </>
@@ -129,6 +194,274 @@ export default function WorkflowEditorPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
 
+  // Export click flow:
+  // - if mappings incomplete -> show warning dialog
+  // - else -> show initial node inputs dialog
+  const [isMappingWarningOpen, setIsMappingWarningOpen] = useState(false);
+  const [mappingWarningData, setMappingWarningData] = useState<{
+    unmappedByNode: Array<{ nodeId: string; label: string; missingTargets: string[] }>;
+    totalNodesChecked: number;
+  } | null>(null);
+
+  const [isInitialInputsOpen, setIsInitialInputsOpen] = useState(false);
+  const [initialInputsData, setInitialInputsData] = useState<{
+    entryNodes: Array<{ nodeId: string; label: string; requiredInputs: string[] }>;
+    totalNodesChecked: number;
+  } | null>(null);
+  const [workflowInputValues, setWorkflowInputValues] = useState<Record<string, string>>({});
+
+  const setWorkflowInputValue = useCallback((path: string, value: string) => {
+    setWorkflowInputValues((prev) => ({ ...prev, [path]: value }));
+  }, []);
+
+  const buildWorkflowInputJsonFromValues = useCallback(() => {
+    // build nested object from paths like request.username
+    const root: any = {};
+    for (const [path, raw] of Object.entries(workflowInputValues)) {
+      if (!path) continue;
+      const value = raw;
+      const parts = path.split(".").filter(Boolean);
+      if (parts.length === 0) continue;
+      let cur = root;
+      for (let i = 0; i < parts.length; i++) {
+        const key = parts[i]!;
+        const isLast = i === parts.length - 1;
+        if (isLast) {
+          cur[key] = value;
+        } else {
+          cur[key] = cur[key] && typeof cur[key] === "object" ? cur[key] : {};
+          cur = cur[key];
+        }
+      }
+    }
+    return JSON.stringify(root, null, 2);
+  }, [workflowInputValues]);
+
+  const workflowInputStorageKey = `conductor.workflowInput.${id || "new"}`;
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(workflowInputStorageKey);
+      if (saved) {
+        // validate JSON
+        const obj = JSON.parse(saved);
+        // only support object storage; if not, ignore
+        if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+          const flatten = (o: any, prefix = "", out: Record<string, string> = {}) => {
+            Object.entries(o || {}).forEach(([k, v]) => {
+              const path = prefix ? `${prefix}.${k}` : k;
+              if (v && typeof v === "object" && !Array.isArray(v)) {
+                flatten(v, path, out);
+              } else {
+                out[path] = v == null ? "" : String(v);
+              }
+            });
+            return out;
+          };
+          setWorkflowInputValues((prev) => ({ ...prev, ...flatten(obj) }));
+        }
+      }
+    } catch {
+      // ignore corrupted storage
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowInputStorageKey]);
+
+  const saveWorkflowInputToWorkflow = useCallback(() => {
+    const raw = buildWorkflowInputJsonFromValues();
+    // validate JSON
+    JSON.parse(raw);
+    localStorage.setItem(workflowInputStorageKey, raw);
+  }, [buildWorkflowInputJsonFromValues, workflowInputStorageKey]);
+
+  const buildWorkflowDefinitionPayload = useCallback(
+    async (entryNodeIds: string[]) => {
+      const workflowName = id ? `Workflow ${id.slice(0, 8)}` : "New Workflow";
+      const version = "1.0.0";
+
+      // cache method & service detail
+      const methodCache = new Map<string, any>();
+      const serviceCache = new Map<string, any>();
+
+      const getNodeMethodDetail = async (node: any) => {
+        if (methodCache.has(node.id)) return methodCache.get(node.id);
+        const data = node?.data || {};
+        if (!data.appName || !data.serviceName || !data.methodName) {
+          methodCache.set(node.id, null);
+          return null;
+        }
+        const detail = await getMethodDetail(data.appName, data.serviceName, data.methodName);
+        methodCache.set(node.id, detail);
+        return detail;
+      };
+
+      const getNodeServiceDetail = async (node: any) => {
+        if (serviceCache.has(node.id)) return serviceCache.get(node.id);
+        const data = node?.data || {};
+        if (!data.appName || !data.serviceName) {
+          serviceCache.set(node.id, null);
+          return null;
+        }
+        const detail = await getServiceDetail(data.appName, data.serviceName);
+        serviceCache.set(node.id, detail);
+        return detail;
+      };
+
+      // build nodeKey map
+      const nodeKeyById = new Map<string, string>();
+      (nodes as any[]).forEach((n) => {
+        const key = toNodeKey(n.data);
+        if (key) nodeKeyById.set(n.id, key);
+      });
+
+      // build inputParams for each node from mappings
+      const incomingEdgesByTarget = new Map<string, any[]>();
+      (edges as any[]).forEach((e) => {
+        const t = e?.target;
+        if (!t) return;
+        incomingEdgesByTarget.set(t, [...(incomingEdgesByTarget.get(t) || []), e]);
+      });
+
+      const dagNodes: any[] = [];
+      const inputsMeta: Record<string, unknown> = {};
+
+      for (const n of nodes as any[]) {
+        const nodeKey = nodeKeyById.get(n.id) || n.id;
+        const detail = await getNodeMethodDetail(n);
+        const serviceDetail = await getNodeServiceDetail(n);
+
+        // build inputParams
+        const inputParams: Record<string, any> = {};
+        const isEntry = entryNodeIds.includes(n.id);
+
+        if (isEntry) {
+          // for entry nodes: bind all leaf inputs to workflow.input.<path>
+          const required = extractLeafPathsFromParamTree(detail?.parameters || [], "");
+          required.forEach((p) => setByPath(inputParams, p, `\${workflow.input.${p}}`));
+        } else {
+          const incoming = incomingEdgesByTarget.get(n.id) || [];
+          incoming.forEach((e) => {
+            const sourceId = e?.source;
+            const sourceKey = sourceId ? nodeKeyById.get(sourceId) : null;
+            const mappings = (e?.data?.mappings || []) as FieldMapping[];
+            mappings.forEach((m) => {
+              if (!m?.targetField || !m?.sourceField) return;
+              let expr = m.sourceField;
+              if (expr.startsWith("workflow.") || expr.startsWith("env.")) {
+                expr = `\${${expr}}`;
+              } else if (sourceKey) {
+                // upstream output reference
+                expr = `\${${sourceKey}.result.${expr}}`;
+              } else {
+                expr = `\${${expr}}`;
+              }
+              setByPath(inputParams, m.targetField, expr);
+            });
+          });
+        }
+
+        // inputs metadata: keep close to backend method detail shape
+        if (detail?.parameters && Array.isArray(detail.parameters)) {
+          inputsMeta[nodeKey] = detail.parameters.map((p: any) => ({
+            name: p.name,
+            simpleType: typeof p.type === "string" ? p.type.split(".").slice(-1)[0] : p.type,
+            fullType: p.type,
+            description: "",
+            required: true,
+            defaultValue: null,
+            fields: (p.fields || []).map((f: any) => ({
+              fieldName: f.fieldName,
+              fieldSimpleType: typeof f.type === "string" ? f.type.split(".").slice(-1)[0] : f.type,
+              fieldFullType: f.type,
+              description: `${f.fieldName} (${typeof f.type === "string" ? f.type.split(".").slice(-1)[0] : "any"})`,
+              required: false,
+              example: null,
+              allowableValues: null,
+              nestedFields: f.fields || null,
+            })),
+          }));
+        }
+
+        dagNodes.push({
+          id: nodeKey,
+          name: n.data?.label || nodeKey,
+          type: "SERVICE_CALL",
+          inputParams,
+          serviceInvocation: {
+            applicationName: n.data?.appName,
+            version: "1.0.0",
+            interfaceClass: serviceDetail?.interfaceClass || n.data?.interfaceClass || "",
+            methodName: n.data?.methodName,
+            parameterTypes: (detail?.parameters || [])
+              .map((p: any) => p.fullType || p.type)
+              .filter(Boolean),
+            loadBalance: "ROUND_ROBIN",
+          },
+        });
+      }
+
+      const dagEdges = (edges as any[]).map((e, idx) => ({
+        // 使用简短的、与前端边 id 解耦的规则
+        id: `edge-${idx + 1}`,
+        source: nodeKeyById.get(e.source) || e.source,
+        target: nodeKeyById.get(e.target) || e.target,
+        type: "SEQUENCE",
+      }));
+
+      // 将“连接概述”汇总为工作流描述（不再写入 edge.description）
+      const workflowDescription = (edges as any[])
+        .map((e) => (e?.data?.explanation || "").toString().trim())
+        .filter(Boolean)
+        .join("；");
+
+      // outputs: use sink nodes' responses[0] if present (simplified)
+      const outgoingCount = new Map<string, number>();
+      nodes.forEach((n) => outgoingCount.set(n.id, 0));
+      edges.forEach((e: any) => {
+        if (e?.source) outgoingCount.set(e.source, (outgoingCount.get(e.source) || 0) + 1);
+      });
+      const sinkNodes = (nodes as any[]).filter((n) => (outgoingCount.get(n.id) || 0) === 0);
+      const outputs: any[] = [];
+      for (const sn of sinkNodes) {
+        const detail = await getNodeMethodDetail(sn);
+        const responses = (detail?.responses || []) as any[];
+        if (!responses.length) continue;
+        const first = responses[0] || {};
+        outputs.push({
+          name: "response",
+          simpleType:
+            (first.returnTypeName || detail?.returnTypeName || detail?.returnType || "Response")
+              .toString()
+              .split(".")
+              .slice(-1)[0],
+          fullType: first.returnTypeName || detail?.returnTypeName || detail?.returnType,
+          description: detail?.description || "",
+          required: true,
+          fields: (first.fields || []).map((f: any) => ({
+            fieldName: f.fieldName,
+            fieldSimpleType: typeof f.type === "string" ? f.type.split(".").slice(-1)[0] : f.type,
+            fieldFullType: f.type,
+            description: `${f.fieldName} (${typeof f.type === "string" ? f.type.split(".").slice(-1)[0] : "any"})`,
+            required: false,
+            example: null,
+            allowableValues: null,
+            nestedFields: f.fields || null,
+          })),
+        });
+      }
+
+      return {
+        workflowName,
+        workflowDescription,
+        version,
+        dagJson: { nodes: dagNodes, edges: dagEdges },
+        inputs: inputsMeta,
+        outputs,
+      };
+    },
+    [edges, id, nodes]
+  );
+
   // Archive & DB Mount State
   const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
   const [archiveName, setArchiveName] = useState("");
@@ -142,6 +475,7 @@ export default function WorkflowEditorPage() {
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const [existingMappings, setExistingMappings] = useState<Array<{ sourceField: string; targetField: string }>>([]);
+  const [existingExplanation, setExistingExplanation] = useState<string>("");
 
   // Mock Databases available
   const availableDatabases = [
@@ -250,11 +584,12 @@ export default function WorkflowEditorPage() {
   // 监听修改映射事件
   useEffect(() => {
     const handleEditEdgeMapping = (event: CustomEvent) => {
-      const { edgeId, mappings } = event.detail;
+      const { edgeId, mappings, explanation } = event.detail;
       const edge = edges.find((e) => e.id === edgeId);
       if (edge) {
         setEditingEdgeId(edgeId);
         setExistingMappings(mappings);
+        setExistingExplanation(explanation || "");
         setPendingConnection({
           source: edge.source,
           target: edge.target,
@@ -278,6 +613,7 @@ export default function WorkflowEditorPage() {
         // 新建连接时，清空上一次的编辑状态和映射
         setEditingEdgeId(null);
         setExistingMappings([]);
+        setExistingExplanation("");
         setPendingConnection(params);
         setIsConnectionDialogOpen(true);
       } else {
@@ -475,6 +811,113 @@ export default function WorkflowEditorPage() {
     });
   };
 
+  const handleExport = useCallback(async () => {
+    // 1) Find entry nodes (no incoming edges)
+    const incomingCount = new Map<string, number>();
+    nodes.forEach((n) => incomingCount.set(n.id, 0));
+    edges.forEach((e: any) => {
+      if (e?.target) incomingCount.set(e.target, (incomingCount.get(e.target) || 0) + 1);
+    });
+    const entryNodes = nodes.filter((n) => (incomingCount.get(n.id) || 0) === 0);
+
+    // 2) Load method details for nodes that have method info
+    const methodCache = new Map<string, any>();
+    const getNodeMethodDetail = async (node: any) => {
+      if (methodCache.has(node.id)) return methodCache.get(node.id);
+      const data = node?.data || {};
+      if (!data.appName || !data.serviceName || !data.methodName) {
+        methodCache.set(node.id, null);
+        return null;
+      }
+      try {
+        const detail = await getMethodDetail(data.appName, data.serviceName, data.methodName);
+        methodCache.set(node.id, detail);
+        return detail;
+      } catch {
+        methodCache.set(node.id, null);
+        return null;
+      }
+    };
+
+    // 3) Build required leaf inputs for each node
+    const requiredInputsByNodeId = new Map<string, string[]>();
+    for (const node of nodes as any[]) {
+      const detail = await getNodeMethodDetail(node);
+      const params = (detail?.parameters || []) as any[];
+      const leafPaths = extractLeafPathsFromParamTree(params, "");
+      requiredInputsByNodeId.set(node.id, uniq(leafPaths));
+    }
+
+    // 4) Build mapped targets for each node from all incoming edges
+    const mappedTargetsByNodeId = new Map<string, Set<string>>();
+    nodes.forEach((n) => mappedTargetsByNodeId.set(n.id, new Set()));
+    edges.forEach((e: any) => {
+      const targetId = e?.target;
+      const mappings = ((e?.data?.mappings as FieldMapping[]) || []) as FieldMapping[];
+      if (!targetId || !mappedTargetsByNodeId.has(targetId)) return;
+      const set = mappedTargetsByNodeId.get(targetId)!;
+      mappings.forEach((m) => {
+        if (m?.targetField) set.add(m.targetField);
+      });
+    });
+
+    // 5) Validate: for each non-entry node, all required inputs must be mapped
+    const unmappedByNode: Array<{ nodeId: string; label: string; missingTargets: string[] }> = [];
+    for (const node of nodes as any[]) {
+      const required = requiredInputsByNodeId.get(node.id) || [];
+      if (required.length === 0) continue;
+
+      const isEntry = entryNodes.some((en) => en.id === node.id);
+      if (isEntry) continue; // entry node inputs come from external workflow input
+
+      const mapped = mappedTargetsByNodeId.get(node.id) || new Set<string>();
+      const missing = required.filter((p) => !mapped.has(p));
+      if (missing.length > 0) {
+        unmappedByNode.push({
+          nodeId: node.id,
+          label: (node.data?.label as string) || node.id,
+          missingTargets: missing,
+        });
+      }
+    }
+
+    // 6) Entry node required inputs shown to user
+    const entryNodeInputs = entryNodes.map((n: any) => ({
+      nodeId: n.id,
+      label: (n.data?.label as string) || n.id,
+      requiredInputs: requiredInputsByNodeId.get(n.id) || [],
+    }));
+
+    // 7) implicit mapping check first
+    if (unmappedByNode.length > 0) {
+      setMappingWarningData({
+        unmappedByNode,
+        totalNodesChecked: nodes.length,
+      });
+      setIsMappingWarningOpen(true);
+      return;
+    }
+
+    // 8) mapping ok -> ask for initial node inputs if needed
+    if (entryNodeInputs.some((x) => x.requiredInputs.length > 0)) {
+      setInitialInputsData({
+        entryNodes: entryNodeInputs,
+        totalNodesChecked: nodes.length,
+      });
+      const nextValues: Record<string, string> = {};
+      entryNodeInputs.forEach((en) => {
+        (en.requiredInputs || []).forEach((p) => {
+          nextValues[p] = workflowInputValues[p] ?? "";
+        });
+      });
+      setWorkflowInputValues(nextValues);
+      setIsInitialInputsOpen(true);
+      return;
+    }
+
+    alert("映射完整，且无初始节点入参需求（可继续实现实际导出逻辑）。");
+  }, [nodes, edges, workflowInputValues]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Toolbar */}
@@ -497,7 +940,7 @@ export default function WorkflowEditorPage() {
             icon={Download}
             label="Export"
             variant="secondary"
-            onClick={() => {}}
+            onClick={handleExport}
           />
           <ActionButton
             icon={Archive}
@@ -735,7 +1178,7 @@ export default function WorkflowEditorPage() {
               配置连接
             </DialogTitle>
             <DialogDescription>
-              选择源方法的输出参数和目标方法的输入参数进行连接
+              选择源方法的输出参数（或外部输入）和目标方法的输入参数进行连接
             </DialogDescription>
           </DialogHeader>
           {pendingConnection && (
@@ -743,7 +1186,8 @@ export default function WorkflowEditorPage() {
               connection={pendingConnection}
               nodes={nodes}
               existingMappings={existingMappings}
-              onConfirm={(mappings) => {
+              existingExplanation={existingExplanation}
+              onConfirm={(mappings, explanation) => {
                 if (pendingConnection && mappings.length > 0) {
                   if (editingEdgeId) {
                     // 更新现有边
@@ -752,7 +1196,7 @@ export default function WorkflowEditorPage() {
                         if (edge.id === editingEdgeId) {
                           return {
                             ...edge,
-                            data: { mappings },
+                            data: { mappings, explanation },
                           };
                         }
                         return edge;
@@ -766,7 +1210,7 @@ export default function WorkflowEditorPage() {
                           ...pendingConnection,
                           animated: true,
                           style: { stroke: "hsl(var(--primary))" },
-                          data: { mappings },
+                          data: { mappings, explanation },
                         },
                         eds
                       )
@@ -777,13 +1221,142 @@ export default function WorkflowEditorPage() {
                 setPendingConnection(null);
                 setEditingEdgeId(null);
                 setExistingMappings([]);
+                setExistingExplanation("");
               }}
               onCancel={() => {
                 setIsConnectionDialogOpen(false);
                 setPendingConnection(null);
+                setExistingExplanation("");
               }}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Mapping Warning Dialog (shown before initial inputs) */}
+      <Dialog open={isMappingWarningOpen} onOpenChange={setIsMappingWarningOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>映射未完成，无法继续</DialogTitle>
+            <DialogDescription>请先补齐缺失的参数映射后再继续。</DialogDescription>
+          </DialogHeader>
+
+          {mappingWarningData && (
+            <div className="space-y-6 py-2">
+              {/* Missing mappings */}
+              {mappingWarningData.unmappedByNode.length > 0 && (
+                <div className="border rounded-md p-4">
+                  <div className="font-semibold text-sm mb-2">未完成映射的节点</div>
+                  <div className="space-y-3">
+                    {mappingWarningData.unmappedByNode.map((item) => (
+                      <div key={item.nodeId} className="rounded-md border border-border/60 p-3 bg-muted/10">
+                        <div className="text-sm font-medium">{item.label}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          缺少映射（目标输入字段）共 {item.missingTargets.length} 个
+                        </div>
+                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {item.missingTargets.map((p) => (
+                            <div key={p} className="text-xs font-mono bg-background/60 border rounded px-2 py-1">
+                              {p}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-3">
+                    处理方式：打开对应连线的“配置连接”，为这些目标输入字段补齐映射（可以来自上游输出或外部输入）。
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsMappingWarningOpen(false)}
+              className="w-full"
+            >
+              我知道了，去补映射
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Initial Node Inputs Dialog (shown only when mappings complete) */}
+      <Dialog open={isInitialInputsOpen} onOpenChange={setIsInitialInputsOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>初始节点输入参数</DialogTitle>
+            <DialogDescription>请填写起始节点所需输入，点击“确定”将保存到该工作流。</DialogDescription>
+          </DialogHeader>
+
+          {initialInputsData && (
+            <div className="space-y-6 py-2">
+              {initialInputsData.entryNodes.some((x) => x.requiredInputs.length > 0) ? (
+                <div className="border rounded-md p-4">
+                  <div className="space-y-3">
+                    {initialInputsData.entryNodes
+                      .filter((x) => x.requiredInputs.length > 0)
+                      .map((x) => (
+                        <div key={x.nodeId} className="rounded-md border border-border/60 p-3 bg-muted/10">
+                          <div className="text-sm font-medium">{x.label}</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            该节点没有上游输入，请在下方直接填写所需字段：
+                          </div>
+                          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {x.requiredInputs.map((p) => (
+                              <div key={p} className="space-y-1.5 rounded-md border bg-background/60 px-2 py-2">
+                                <div className="text-xs font-mono">{p}</div>
+                                <input
+                                  value={workflowInputValues[p] ?? ""}
+                                  onChange={(e) => setWorkflowInputValue(p, e.target.value)}
+                                  placeholder={`请输入 ${p}`}
+                                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">该工作流没有需要填写初始入参的起始节点。</div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setIsInitialInputsOpen(false)} className="sm:w-1/2">
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                (async () => {
+                  try {
+                    // 1) persist workflow.input (local) for later mapping usage
+                    saveWorkflowInputToWorkflow();
+
+                    // 2) build + submit workflow definition payload
+                    const entryNodeIds =
+                      initialInputsData?.entryNodes?.map((x) => x.nodeId) || [];
+                    const payload = await buildWorkflowDefinitionPayload(entryNodeIds);
+                    await submitWorkflowDefinition(payload as any);
+
+                    setIsInitialInputsOpen(false);
+                    alert("已提交工作流定义到后端。");
+                  } catch (e) {
+                    alert(`提交失败：${e instanceof Error ? e.message : "未知错误"}`);
+                  }
+                })();
+              }}
+              className="sm:w-1/2"
+            >
+              确定
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -795,13 +1368,18 @@ const ConnectionConfigDialogContent = ({
   connection,
   nodes,
   existingMappings = [],
+  existingExplanation = "",
   onConfirm,
   onCancel,
 }: {
   connection: Connection;
   nodes: Node[];
   existingMappings?: Array<{ sourceField: string; targetField: string }>;
-  onConfirm: (mappings: Array<{ sourceField: string; targetField: string }>) => void;
+  existingExplanation?: string;
+  onConfirm: (
+    mappings: Array<{ sourceField: string; targetField: string }>,
+    explanation: string
+  ) => void;
   onCancel: () => void;
 }) => {
   const sourceNode = nodes.find((n) => n.id === connection.source);
@@ -870,6 +1448,7 @@ const ConnectionConfigDialogContent = ({
   const sourceOutputsTree = filterOutSuccess(buildSourceOutputsTree());
   const targetInputsTree = buildTargetInputsTree();
 
+  const [expandedExternal, setExpandedExternal] = useState(true);
   const [expandedSource, setExpandedSource] = useState(true);
   const [expandedTarget, setExpandedTarget] = useState(true);
   const [expandedSourceKeys, setExpandedSourceKeys] = useState<string[]>([]);
@@ -877,6 +1456,12 @@ const ConnectionConfigDialogContent = ({
   const [mappings, setMappings] = useState<Array<{ sourceField: string; targetField: string }>>(existingMappings);
   const [currentSourceField, setCurrentSourceField] = useState<string>("");
   const [currentTargetField, setCurrentTargetField] = useState<string>("");
+  const [externalSourceExpr, setExternalSourceExpr] = useState<string>("");
+  const [edgeExplanation, setEdgeExplanation] = useState<string>(existingExplanation || "");
+
+  useEffect(() => {
+    setEdgeExplanation(existingExplanation || "");
+  }, [existingExplanation]);
 
   const handleAddMapping = () => {
     if (currentSourceField && currentTargetField) {
@@ -898,7 +1483,7 @@ const ConnectionConfigDialogContent = ({
 
   const handleConfirm = () => {
     if (mappings.length > 0) {
-      onConfirm(mappings);
+      onConfirm(mappings, edgeExplanation.trim());
     }
   };
 
@@ -1007,42 +1592,101 @@ const ConnectionConfigDialogContent = ({
     <div className="py-4 space-y-6">
       {/* 第一部分：可展开的参数选择列表 */}
       <div className="grid grid-cols-2 gap-4">
-        {/* 源方法输出列表 */}
-        <div className="border rounded-md">
-          <button
-            onClick={() => setExpandedSource(!expandedSource)}
-            className="w-full flex items-center justify-between p-3 border-b bg-muted/20 hover:bg-muted/40 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">输出参数</span>
-              <span className="text-xs text-muted-foreground">
-                ({sourceData?.label || "未知方法"})
-              </span>
-            </div>
-            {expandedSource ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-          </button>
-          {expandedSource && (
-            <div className="p-3 space-y-2 max-h-60 overflow-y-auto">
-              {sourceOutputsTree.length > 0 ? (
-                renderFieldTree(
-                  sourceOutputsTree,
-                  "",
-                  expandedSourceKeys,
-                  setExpandedSourceKeys,
-                  currentSourceField,
-                  setCurrentSourceField
-                )
+        {/* 左侧：外部输入 + 源方法输出（两个独立下拉框） */}
+        <div className="space-y-3">
+          {/* 外部输入 */}
+          <div className="border rounded-md">
+            <button
+              onClick={() => setExpandedExternal(!expandedExternal)}
+              className="w-full flex items-center justify-between p-3 border-b bg-muted/20 hover:bg-muted/40 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm">外部输入</span>
+                
+              </div>
+              {expandedExternal ? (
+                <ChevronDown className="h-4 w-4" />
               ) : (
-                <div className="text-xs text-muted-foreground text-center py-4">
-                  无输出参数
-                </div>
+                <ChevronRight className="h-4 w-4" />
               )}
-            </div>
-          )}
+            </button>
+            {expandedExternal && (
+              <div className="p-3 space-y-2">
+                <div className="text-[10px] text-muted-foreground">
+                  输入外部字段（例如：`request.username`）
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={externalSourceExpr}
+                    onChange={(e) => setExternalSourceExpr(e.target.value)}
+                   
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      const v = externalSourceExpr.trim();
+                      if (!v) return;
+                      // 若输入的是叶子字段（request.username），自动补 workflow.input 前缀
+                      if (v.startsWith("workflow.") || v.startsWith("env.")) {
+                        setCurrentSourceField(v);
+                      } else {
+                        setCurrentSourceField(`workflow.input.${v}`);
+                      }
+                    }}
+                    disabled={!externalSourceExpr.trim()}
+                  >
+                    使用
+                  </Button>
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  已选源字段：
+                  <span className="font-mono text-foreground/90 break-all ml-1">
+                    {currentSourceField || "未选择"}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 源方法输出列表 */}
+          <div className="border rounded-md">
+            <button
+              onClick={() => setExpandedSource(!expandedSource)}
+              className="w-full flex items-center justify-between p-3 border-b bg-muted/20 hover:bg-muted/40 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm">输出参数</span>
+                <span className="text-xs text-muted-foreground">
+                  ({sourceData?.label || "未知方法"})
+                </span>
+              </div>
+              {expandedSource ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+            {expandedSource && (
+              <div className="p-3 space-y-2 max-h-60 overflow-y-auto">
+                {sourceOutputsTree.length > 0 ? (
+                  renderFieldTree(
+                    sourceOutputsTree,
+                    "",
+                    expandedSourceKeys,
+                    setExpandedSourceKeys,
+                    currentSourceField,
+                    setCurrentSourceField
+                  )
+                ) : (
+                  <div className="text-xs text-muted-foreground text-center py-4">
+                    无输出参数
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 目标方法输入列表 */}
@@ -1135,6 +1779,17 @@ const ConnectionConfigDialogContent = ({
           </div>
         </div>
       )}
+
+      {/* 第三部分之后：连接概述 */}
+      <div className="border rounded-md p-4 bg-muted/10">
+        <Label className="mb-2 block">连接概述</Label>
+        <input
+          value={edgeExplanation}
+          onChange={(e) => setEdgeExplanation(e.target.value)}
+          placeholder="这个连接为了什么"
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        />
+      </div>
 
       {/* 第四部分：连接视图 */}
       <div className="border rounded-md p-4">

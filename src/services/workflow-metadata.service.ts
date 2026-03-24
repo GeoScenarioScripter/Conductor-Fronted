@@ -64,6 +64,8 @@ export interface MethodParameter {
   name?: string;
   fieldName?: string;
   type?: string;
+  /** 后端返回的参数全限定类型（用于 parameterTypes.fullType） */
+  fullType?: string;
   fields?: MethodParameter[];
 }
 

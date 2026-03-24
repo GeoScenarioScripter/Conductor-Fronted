@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ElementType } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -26,53 +26,36 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { WorkflowSummary, WorkflowStatus } from "./types";
+import { useWorkflows } from "@/hooks/use-workflow";
 
-const initialWorkflows: WorkflowSummary[] = [
-  {
-    id: "wf-a1b2c3d4",
-    name: "User Auth Pipeline",
-    description: "Handles login, token refresh, and session management flows.",
-    status: "active",
-    nodeCount: 5,
-    createdAt: "2025-02-10",
-    updatedAt: "2025-03-01",
-    baseUrl: "http://localhost:8080/api/wf-a1b2c3d4",
-    thumbnail: "bg-gradient-to-br from-cyan-500 to-blue-600",
-  },
-  {
-    id: "wf-e5f6g7h8",
-    name: "Order Processing",
-    description: "Orchestrates inventory check, payment, and fulfillment.",
-    status: "active",
-    nodeCount: 8,
-    createdAt: "2025-02-18",
-    updatedAt: "2025-03-05",
-    baseUrl: "http://localhost:8080/api/wf-e5f6g7h8",
-    thumbnail: "bg-gradient-to-br from-violet-500 to-purple-700",
-  },
-  {
-    id: "wf-i9j0k1l2",
-    name: "Analytics Aggregator",
-    description: "Collects metrics from services and routes to the dashboard.",
-    status: "draft",
-    nodeCount: 3,
-    createdAt: "2025-03-01",
-    updatedAt: "2025-03-10",
-    baseUrl: "http://localhost:8080/api/wf-i9j0k1l2",
-    thumbnail: "bg-gradient-to-br from-emerald-400 to-teal-600",
-  },
-  {
-    id: "wf-m3n4o5p6",
-    name: "Notification Dispatcher",
-    description: "Routes push/email/SMS triggers across microservices.",
-    status: "archived",
-    nodeCount: 4,
-    createdAt: "2025-01-15",
-    updatedAt: "2025-02-28",
-    baseUrl: "http://localhost:8080/api/wf-m3n4o5p6",
-    thumbnail: "bg-gradient-to-br from-orange-400 to-rose-600",
-  },
-];
+function extractWorkflowList(raw: any): any[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+
+  const directKeys = ["definitions", "data", "list", "records", "content", "items", "result"];
+  for (const key of directKeys) {
+    if (Array.isArray(raw?.[key])) return raw[key];
+  }
+
+  // one more nested level for common API envelopes like { data: { records: [] } }
+  for (const key of directKeys) {
+    const child = raw?.[key];
+    if (!child || typeof child !== "object") continue;
+    for (const nestedKey of directKeys) {
+      if (Array.isArray(child?.[nestedKey])) return child[nestedKey];
+    }
+  }
+
+  // single-object fallback: backend may directly return one definition object
+  if (
+    typeof raw === "object" &&
+    (raw.workflowDefId || raw.workflowName || raw.dagDefinition || raw.id)
+  ) {
+    return [raw];
+  }
+
+  return [];
+}
 
 const statusColors: Record<WorkflowStatus, string> = {
   active: "bg-green-500/15 text-green-400 border border-green-500/30",
@@ -93,12 +76,40 @@ const statusLabels: Record<WorkflowStatus, string> = {
 };
 
 export default function WorkflowListPage() {
-  const [workflows] = useState<WorkflowSummary[]>(initialWorkflows);
+  const { data, isLoading, error } = useWorkflows();
   const [currentPage, setCurrentPage] = useState(1);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [detailWorkflow, setDetailWorkflow] = useState<WorkflowSummary | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const navigate = useNavigate();
+
+  const workflows = useMemo<WorkflowSummary[]>(() => {
+    const list = extractWorkflowList(data);
+
+    const thumbnailByStatus: Record<WorkflowStatus, string> = {
+      active: "bg-gradient-to-br from-cyan-500 to-blue-600",
+      draft: "bg-gradient-to-br from-emerald-400 to-teal-600",
+      archived: "bg-gradient-to-br from-orange-400 to-rose-600",
+    };
+
+    return list.filter(Boolean).map((wf: any) => {
+      const rawStatus = String(wf.status || "").toUpperCase();
+      const status: WorkflowStatus =
+        rawStatus === "ACTIVE" ? "active" : rawStatus === "ARCHIVED" ? "archived" : "draft";
+
+      return {
+        id: String(wf.id ?? wf.workflowDefId ?? ""),
+        name: String(wf.name ?? wf.workflowName ?? "Untitled Workflow"),
+        description: String(wf.description ?? wf.workflowDescription ?? ""),
+        status,
+        nodeCount: Number(wf.nodeCount ?? wf.dagDefinition?.nodes?.length ?? wf.nodes?.length ?? 0),
+        createdAt: wf.createdAt ? String(wf.createdAt).slice(0, 10) : "",
+        updatedAt: wf.updatedAt ? String(wf.updatedAt).slice(0, 10) : "",
+        baseUrl: String(wf.baseUrl ?? wf.workflowDefId ?? ""),
+        thumbnail: thumbnailByStatus[status],
+      };
+    });
+  }, [data]);
 
   const itemsPerPage = 5; // 5 data cards + 1 add card = 6 grid slots
   const totalPages = Math.ceil(workflows.length / itemsPerPage);
@@ -126,6 +137,13 @@ export default function WorkflowListPage() {
           Create and manage your microservice orchestration workflows.
         </p>
       </div>
+
+      {isLoading && <div className="text-sm text-muted-foreground">加载工作流列表中...</div>}
+      {error && (
+        <div className="text-sm text-destructive">
+          工作流列表加载失败：{error instanceof Error ? error.message : "未知错误"}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* New Workflow add card — always first */}
@@ -229,6 +247,19 @@ export default function WorkflowListPage() {
           </Card>
         ))}
       </div>
+
+      {!isLoading && !error && workflows.length === 0 && (
+        <div className="space-y-2">
+          <div className="text-sm text-muted-foreground">
+            暂无工作流数据（接口已请求：`/api/workflow/definitions`）。
+          </div>
+          {import.meta.env.DEV && data && (
+            <pre className="max-h-56 overflow-auto rounded border bg-muted/30 p-3 text-[11px] text-foreground/80">
+              {JSON.stringify(data, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (

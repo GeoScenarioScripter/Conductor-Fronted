@@ -30,11 +30,47 @@ export interface Workflow {
   updatedAt: string;
 }
 
+// ===== Workflow definition export (DAG JSON) =====
+export interface WorkflowDefinitionEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: string; // e.g. SEQUENCE
+}
+
+export interface WorkflowDefinitionNode {
+  id: string;
+  name: string;
+  type: string; // e.g. SERVICE_CALL
+  inputParams: Record<string, unknown>;
+  serviceInvocation?: Record<string, unknown>;
+}
+
+export interface WorkflowDefinitionPayload {
+  workflowName: string;
+  workflowDescription?: string;
+  version: string;
+  dagJson: {
+    nodes: WorkflowDefinitionNode[];
+    edges: WorkflowDefinitionEdge[];
+  };
+  inputs?: Record<string, unknown>;
+  outputs?: unknown[];
+}
+
+/**
+ * 提交/导出工作流定义（DAG JSON）
+ * 注意：后端接口路径需与后端一致
+ */
+export async function submitWorkflowDefinition(payload: WorkflowDefinitionPayload): Promise<unknown> {
+  return apiClient.post<unknown>('/workflow/definitions', payload);
+}
+
 /**
  * 获取工作流列表
  */
-export async function getWorkflows(): Promise<Workflow[]> {
-  return apiClient.get<Workflow[]>('/workflows');
+export async function getWorkflows(): Promise<any> {
+  return apiClient.get<any>('/workflow/definitions');
 }
 
 /**
