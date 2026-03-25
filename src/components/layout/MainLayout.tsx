@@ -12,6 +12,8 @@ import {
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { ModeToggle } from "@/components/mode-toggle";
+import { clearAuthToken } from "@/lib/auth";
+import { useNavigate } from "react-router-dom";
 
 const navItems = [
   { path: "/workflow", label: "工作流管理", icon: Workflow },
@@ -23,6 +25,7 @@ const navItems = [
 export function MainLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate();
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden font-sans selection:bg-primary selection:text-primary-foreground">
@@ -124,6 +127,15 @@ export function MainLayout() {
             </p>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                clearAuthToken();
+                navigate("/login", { replace: true });
+              }}
+              className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              退出登录
+            </button>
             <ModeToggle />
             <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/50 flex items-center justify-center">
               <span className="text-xs font-bold text-primary">A</span>
