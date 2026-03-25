@@ -35,7 +35,7 @@ import { Label } from "@/components/ui/label";
 import { useMethodDetail } from "@/hooks/use-workflow-metadata";
 import type { ServiceInterface } from "./types";
 import { getMethodDetail, getServiceDetail } from "@/services/workflow-metadata.service";
-import { submitWorkflowDefinition } from "@/services/workflow.service";
+import { getWorkflows, submitWorkflowDefinition } from "@/services/workflow.service";
 
 type FieldMapping = { sourceField: string; targetField: string };
 
@@ -86,6 +86,44 @@ function toNodeKey(nodeData: any): string | null {
   const methodName = nodeData?.methodName;
   if (!appName || !serviceName || !methodName) return null;
   return `${appName}.${serviceName}.${methodName}`;
+}
+
+function extractDefinitions(raw: any): any[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.definitions)) return raw.definitions;
+  if (Array.isArray(raw?.data?.definitions)) return raw.data.definitions;
+  return [];
+}
+
+function deriveMethodInfoFromDagNode(dagNode: any): {
+  appName?: string;
+  serviceName?: string;
+  methodName?: string;
+} {
+  const serviceInvocation = dagNode?.serviceInvocation || {};
+  // Prefer serviceInvocation because it contains full identifiers.
+  const appName = serviceInvocation?.applicationName;
+  const methodName = serviceInvocation?.methodName || dagNode?.methodName;
+
+  // interfaceClass: com.xxx.api.AuthService -> AuthService
+  const interfaceClass: string | undefined = serviceInvocation?.interfaceClass;
+  const serviceName =
+    interfaceClass && typeof interfaceClass === "string"
+      ? interfaceClass.split(".").slice(-1)[0]
+      : undefined;
+
+  // Fallback: parse dagNode.id: app.service.method
+  const parts = typeof dagNode?.id === "string" ? dagNode.id.split(".") : [];
+  if (parts.length >= 3) {
+    return {
+      appName: parts[0] || appName,
+      serviceName: parts[1] || serviceName,
+      methodName: parts[2] || methodName,
+    };
+  }
+
+  return { appName, serviceName, methodName };
 }
 
 // Define custom node types
@@ -193,6 +231,7 @@ export default function WorkflowEditorPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const [isHydrating, setIsHydrating] = useState(false);
 
   // Export click flow:
   // - if mappings incomplete -> show warning dialog
@@ -238,6 +277,280 @@ export default function WorkflowEditorPage() {
   }, [workflowInputValues]);
 
   const workflowInputStorageKey = `conductor.workflowInput.${id || "new"}`;
+
+  // 当从“工作流管理”进入编辑页时，自动加载已导出的工作流 DAG
+  useEffect(() => {
+    if (!id) return;
+
+    let cancelled = false;
+
+    const hydrate = async () => {
+      setIsHydrating(true);
+      try {
+        const resp: any = await getWorkflows();
+        const definitions = extractDefinitions(resp);
+        const workflowDef =
+          definitions.find(
+            (d: any) =>
+              String(d?.id ?? "") === String(id) ||
+              String(d?.workflowDefId ?? "") === String(id)
+          ) || null;
+
+        if (!workflowDef) {
+          if (!cancelled) {
+            setNodes([]);
+            setEdges([]);
+          }
+          return;
+        }
+
+        const dagNodes = (workflowDef?.dagDefinition?.nodes || []) as any[];
+        const dagEdges = (workflowDef?.dagDefinition?.edges || []) as any[];
+        const workflowDescription = String(workflowDef?.workflowDescription || "");
+        const connectionOverviewParts = workflowDescription
+          .split(/[；;]+/g)
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        // Simple DAG layout: assign layers by topological order
+        const incomingCount = new Map<string, number>();
+        const outgoing = new Map<string, string[]>();
+        dagNodes.forEach((n) => {
+          incomingCount.set(n.id, 0);
+          outgoing.set(n.id, []);
+        });
+        dagEdges.forEach((e) => {
+          if (!incomingCount.has(e.target)) return;
+          incomingCount.set(e.target, (incomingCount.get(e.target) || 0) + 1);
+          if (outgoing.has(e.source)) {
+            outgoing.get(e.source)!.push(e.target);
+          }
+        });
+
+        const level = new Map<string, number>();
+        const queue: string[] = [];
+        dagNodes.forEach((n) => {
+          if ((incomingCount.get(n.id) || 0) === 0) {
+            level.set(n.id, 0);
+            queue.push(n.id);
+          }
+        });
+
+        // Fallback for cycles / missing incoming edges
+        if (queue.length === 0) {
+          dagNodes.forEach((n) => {
+            level.set(n.id, 0);
+            queue.push(n.id);
+            outgoing.set(n.id, outgoing.get(n.id) || []);
+          });
+        }
+
+        while (queue.length > 0) {
+          const cur = queue.shift()!;
+          const curLv = level.get(cur) || 0;
+          const outs = outgoing.get(cur) || [];
+          outs.forEach((t) => {
+            incomingCount.set(t, (incomingCount.get(t) || 0) - 1);
+            const nextLv = curLv + 1;
+            if ((level.get(t) ?? 0) < nextLv) level.set(t, nextLv);
+            if ((incomingCount.get(t) || 0) === 0) queue.push(t);
+          });
+        }
+
+        const levelToNodes = new Map<number, string[]>();
+        dagNodes.forEach((n) => {
+          const lv = level.get(n.id) ?? 0;
+          const arr = levelToNodes.get(lv) || [];
+          arr.push(n.id);
+          levelToNodes.set(lv, arr);
+        });
+
+        const positions: Record<string, { x: number; y: number }> = {};
+        const xGap = 340;
+        const yGap = 160;
+        const sortedLevels = Array.from(levelToNodes.keys()).sort((a, b) => a - b);
+        sortedLevels.forEach((lv, lvIndex) => {
+          const arr = (levelToNodes.get(lv) || []).slice().sort();
+          arr.forEach((nodeId, idx) => {
+            positions[nodeId] = { x: lvIndex * xGap, y: idx * yGap };
+          });
+        });
+
+        const newNodes: Node[] = dagNodes.map((dn) => {
+          const methodInfo = deriveMethodInfoFromDagNode(dn);
+          return {
+            id: dn.id,
+            type: "microapplication",
+            position: positions[dn.id] || { x: 0, y: 0 },
+            data: {
+              label: dn.name || dn.id,
+              description: "",
+              status: "idle",
+              appName: methodInfo.appName,
+              serviceName: methodInfo.serviceName,
+              methodName: methodInfo.methodName,
+              inputs: [],
+              outputs: [],
+              db: dn?.db,
+            },
+          };
+        });
+
+        // 由 dagDefinition.nodes[].inputParams 反推每条边的字段映射，
+        // 使得再次点击“配置连接/编辑映射”时能看到你当时配置的 mappings。
+        const mappingByEdgeKey = new Map<string, FieldMapping[]>();
+        const addMapping = (sourceNodeId: string, targetNodeId: string, mapping: FieldMapping) => {
+          const key = `${sourceNodeId}=>${targetNodeId}`;
+          const arr = mappingByEdgeKey.get(key) || [];
+          arr.push(mapping);
+          mappingByEdgeKey.set(key, arr);
+        };
+
+        const incomingSourcesByTarget = new Map<string, string[]>();
+        dagEdges.forEach((de) => {
+          const arr = incomingSourcesByTarget.get(de.target) || [];
+          arr.push(de.source);
+          incomingSourcesByTarget.set(de.target, Array.from(new Set(arr)));
+        });
+
+        const walkInputParams = (obj: any, parentPath: string, targetNodeId: string) => {
+          if (obj == null) return;
+          if (typeof obj === "string") {
+            const s = obj.trim();
+            const m = s.match(/^\$\{([^}]+)\}$/);
+            if (!m) return;
+            const inner = m[1];
+
+            // 形如 workflow.input.xxx / env.xxx：
+            // 表达式里不带 sourceNodeId，所以只能把它挂到该目标节点的第一条入边上用于回显。
+            if (inner.startsWith("workflow.input.") || inner.startsWith("env.")) {
+              const fallbackSourceNodeId = (incomingSourcesByTarget.get(targetNodeId) || [])[0];
+              if (fallbackSourceNodeId && parentPath) {
+                addMapping(fallbackSourceNodeId, targetNodeId, {
+                  sourceField: inner,
+                  targetField: parentPath,
+                });
+              }
+              return;
+            }
+
+            // 形如: <sourceNodeId>.result.<SourceField>
+            const rm = inner.match(/^(.+)\.result\.(.+)$/);
+            if (!rm) return;
+
+            const sourceNodeId = rm[1];
+            const sourceField = rm[2];
+            if (parentPath) {
+              addMapping(sourceNodeId, targetNodeId, {
+                sourceField,
+                targetField: parentPath,
+              });
+            }
+            return;
+          }
+
+          if (Array.isArray(obj)) return;
+          if (typeof obj !== "object") return;
+
+          Object.entries(obj).forEach(([k, v]) => {
+            const nextPath = parentPath ? `${parentPath}.${k}` : k;
+            walkInputParams(v, nextPath, targetNodeId);
+          });
+        };
+
+        for (const dn of dagNodes as any[]) {
+          const inputParams = dn?.inputParams || {};
+          walkInputParams(inputParams, "", dn.id);
+        }
+
+        const newEdges: Edge[] = dagEdges.map((de, idx) => ({
+          id: `edge-${idx + 1}`,
+          source: de.source,
+          target: de.target,
+          animated: true,
+          type: "default",
+          style: { stroke: "hsl(var(--primary))" },
+          data: {
+            mappings: (mappingByEdgeKey.get(`${de.source}=>${de.target}`) || []).map((m) => ({
+              sourceField: m.sourceField,
+              targetField: m.targetField,
+            })),
+            explanation: de.description || connectionOverviewParts[idx] || "",
+          },
+        }));
+
+        if (!cancelled) {
+          setNodes(newNodes);
+          setEdges(newEdges);
+        }
+
+        // Hydrate inputs/outputs for methods so connection config has trees
+        const extractFields = (params: any[]): any[] => {
+          if (!params || params.length === 0) return [];
+          return params.flatMap((param) => {
+            if (param.fields && Array.isArray(param.fields)) {
+              return param.fields;
+            }
+            if (param.fieldName) return [param];
+            return [];
+          });
+        };
+
+        for (const rn of newNodes as any[]) {
+          const d = rn.data || {};
+          if (!d.appName || !d.serviceName || !d.methodName) continue;
+          try {
+            const methodDetail = await getMethodDetail(d.appName, d.serviceName, d.methodName);
+            const inputFields = extractFields(methodDetail?.parameters || []);
+            const outputFields = extractFields(methodDetail?.responses || []).filter(
+              (f: any) => (f?.fieldName || "").toString().toLowerCase() !== "success"
+            );
+
+            const inputs: ServiceInterface[] = inputFields.map(
+              (field: any, index: number) => ({
+                id: `input-${rn.id}-${field.fieldName || "field"}-${index}`,
+                name: field.fieldName || `field_${index}`,
+                type: field.type || "any",
+              })
+            );
+
+            const outputs: ServiceInterface[] = outputFields.map(
+              (field: any, index: number) => ({
+                id: `output-${rn.id}-${field.fieldName || "field"}-${index}`,
+                name: field.fieldName || `field_${index}`,
+                type: field.type || "any",
+              })
+            );
+
+            if (cancelled) return;
+            setNodes((prev) =>
+              prev.map((n) =>
+                n.id === rn.id
+                  ? {
+                      ...n,
+                      data: {
+                        ...n.data,
+                        inputs,
+                        outputs,
+                      },
+                    }
+                  : n
+              )
+            );
+          } catch {
+            // ignore hydrate failures (still show nodes/edges)
+          }
+        }
+      } finally {
+        if (!cancelled) setIsHydrating(false);
+      }
+    };
+
+    hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, setEdges, setNodes]);
 
   useEffect(() => {
     try {
@@ -954,6 +1267,11 @@ export default function WorkflowEditorPage() {
       <div className="flex-1 flex overflow-hidden">
         <WorkflowSidebar />
         <div className="flex-1 relative" ref={reactFlowWrapper}>
+          {isHydrating && (
+            <div className="absolute inset-0 z-10 bg-background/40 backdrop-blur-sm flex items-center justify-center text-sm text-muted-foreground">
+              正在加载工作流定义...
+            </div>
+          )}
           <ReactFlow
             nodes={nodes}
             edges={edges}
