@@ -63,21 +63,21 @@ export interface WorkflowDefinitionPayload {
  * 注意：后端接口路径需与后端一致
  */
 export async function submitWorkflowDefinition(payload: WorkflowDefinitionPayload): Promise<unknown> {
-  return apiClient.post<unknown>('/workflow/definitions', payload);
+  return apiClient.post<unknown>('/conductor/workflow/definitions', payload);
 }
 
 /**
  * 获取工作流列表
  */
 export async function getWorkflows(): Promise<any> {
-  return apiClient.get<any>('/workflow/definitions');
+  return apiClient.get<any>('/conductor/workflow/definitions');
 }
 
 /**
  * 获取工作流详情
  */
 export async function getWorkflowById(id: string): Promise<Workflow> {
-  return apiClient.get<Workflow>(`/workflows/${id}`);
+  return apiClient.get<Workflow>(`/conductor/workflow/definitions/${id}`);
 }
 
 /**
@@ -94,14 +94,14 @@ export async function updateWorkflow(
   id: string,
   workflow: Partial<Workflow>
 ): Promise<Workflow> {
-  return apiClient.put<Workflow>(`/workflows/${id}`, workflow);
+  return apiClient.put<Workflow>(`/conductor/workflow/definitions/${id}`, workflow);
 }
 
 /**
  * 删除工作流
  */
 export async function deleteWorkflow(id: string): Promise<void> {
-  return apiClient.delete<void>(`/workflows/${id}`);
+  return apiClient.delete<void>(`/conductor/workflow/definitions/${id}`);
 }
 
 /**
@@ -109,7 +109,7 @@ export async function deleteWorkflow(id: string): Promise<void> {
  */
 export async function runWorkflow(workflowId: string): Promise<{ status: string; result?: unknown }> {
   return apiClient.post<{ status: string; result?: unknown }>(
-    `/workflows/${workflowId}/run`
+    `/conductor/workflow/definitions/${workflowId}/execute`
   );
 }
 
@@ -127,6 +127,5 @@ export async function archiveWorkflow(
  * 获取可用数据库列表
  */
 export async function getAvailableDatabases(): Promise<string[]> {
-  return apiClient.get<string[]>('/workflows/available-databases');
+  return apiClient.get<string[]>('/conductor/workflow/definitions/available-nodes');
 }
-

@@ -38,14 +38,14 @@ export interface ServiceDetail {
 
 // 1) 应用列表
 export function getApplicationsMetadata() {
-  return apiClient.get<ApplicationMeta[]>("/metadata/applications");
+  return apiClient.get<ApplicationMeta[]>("/conductor/modules");
 }
 
 // 2) 某个应用下的服务列表
 export function getApplicationServices(appName: string) {
   // 确保应用名称正确编码
   const encodedAppName = encodeURIComponent(appName);
-  const endpoint = `/metadata/applications/${encodedAppName}/services`;
+  const endpoint = `/conductor/modules/${encodedAppName}/services`;
   return apiClient.get<ServiceMeta[]>(endpoint);
 }
 
@@ -54,7 +54,7 @@ export function getServiceDetail(appName: string, serviceName: string) {
   // 确保应用名称和服务名称正确编码
   const encodedAppName = encodeURIComponent(appName);
   const encodedServiceName = encodeURIComponent(serviceName);
-  const endpoint = `/metadata/applications/${encodedAppName}/services/${encodedServiceName}`;
+  const endpoint = `/conductor/modules/${encodedAppName}/services/${encodedServiceName}`;
   return apiClient.get<ServiceDetail>(endpoint);
 }
 
@@ -88,6 +88,6 @@ export function getMethodDetail(
   const encodedAppName = encodeURIComponent(appName);
   const encodedServiceName = encodeURIComponent(serviceName);
   const encodedMethodName = encodeURIComponent(methodName);
-  const endpoint = `/metadata/applications/${encodedAppName}/services/${encodedServiceName}/methods/${encodedMethodName}`;
+  const endpoint = `/conductor/modules/${encodedAppName}/services/${encodedServiceName}/methods/${encodedMethodName}`;
   return apiClient.get<MethodDetail>(endpoint);
 }

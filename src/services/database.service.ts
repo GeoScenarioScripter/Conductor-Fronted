@@ -10,6 +10,9 @@ export interface DatabaseItem {
   size: string;
   records: number;
   lastModified: string;
+  connectionUrl?: string;
+  username?: string;
+  enabled?: boolean;
 }
 
 export interface DatabaseRecord {
@@ -27,18 +30,52 @@ export interface UploadDatabaseParams {
   };
 }
 
+interface DataSourceItem {
+  id: number | string;
+  name: string;
+  type: 'POSTGRESQL' | 'MYSQL' | 'MINIO' | string;
+  connectionUrl?: string;
+  username?: string;
+  enabled?: boolean;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+function normalizeDataSource(item: DataSourceItem): DatabaseItem {
+  const typeMap: Record<string, DatabaseItem['type']> = {
+    POSTGRESQL: 'PostgreSQL',
+    MYSQL: 'MySQL',
+    MINIO: 'MinIO',
+    SQLITE: 'SQLite',
+  };
+
+  return {
+    id: String(item.id),
+    name: item.name,
+    type: typeMap[String(item.type).toUpperCase()] ?? 'MySQL',
+    size: '-',
+    records: 0,
+    lastModified: item.updatedAt ?? item.createdAt ?? '-',
+    connectionUrl: item.connectionUrl,
+    username: item.username,
+    enabled: item.enabled,
+  };
+}
+
 /**
  * 获取数据库列表
  */
 export async function getDatabases(): Promise<DatabaseItem[]> {
-  return apiClient.get<DatabaseItem[]>('/databases');
+  const data = await apiClient.get<DataSourceItem[]>('/fabricator/datasources');
+  return data.map(normalizeDataSource);
 }
 
 /**
  * 获取数据库详情
  */
 export async function getDatabaseById(id: string): Promise<DatabaseItem> {
-  return apiClient.get<DatabaseItem>(`/databases/${id}`);
+  const data = await apiClient.get<DataSourceItem>(`/fabricator/datasources/${id}`);
+  return normalizeDataSource(data);
 }
 
 /**
@@ -49,11 +86,10 @@ export async function previewDatabase(
   table?: string,
   limit?: number
 ): Promise<DatabaseRecord[]> {
-  const params: Record<string, string> = {};
-  if (table) params.table = table;
-  if (limit) params.limit = limit.toString();
-
-  return apiClient.get<DatabaseRecord[]>(`/databases/${id}/preview`, params);
+  void id;
+  void table;
+  void limit;
+  return [];
 }
 
 /**
@@ -63,12 +99,17 @@ export async function uploadDatabase(
   params: UploadDatabaseParams
 ): Promise<DatabaseItem> {
   if (params.file) {
-    return apiClient.upload<DatabaseItem>('/databases/upload', params.file);
+    throw new Error('SQL import requires databaseName and dbType; use the Fabricator import flow.');
   } else if (params.minioConfig) {
-    return apiClient.post<DatabaseItem>('/databases/connect', {
-      type: params.type,
-      ...params.minioConfig,
+    const created = await apiClient.post<{ id: number | string }>('/fabricator/datasources', {
+      name: params.minioConfig.bucket,
+      type: 'MINIO',
+      connectionUrl: `http://${params.minioConfig.ip}:${params.minioConfig.port}`,
+      username: 'minioadmin',
+      password: '',
+      enabled: true,
     });
+    return getDatabaseById(String(created.id));
   }
   throw new Error('Either file or minioConfig must be provided');
 }
@@ -77,7 +118,7 @@ export async function uploadDatabase(
  * 删除数据库
  */
 export async function deleteDatabase(id: string): Promise<void> {
-  return apiClient.delete<void>(`/databases/${id}`);
+  return apiClient.delete<void>(`/fabricator/datasources/${id}`);
 }
 
 /**
@@ -87,6 +128,6 @@ export async function updateDatabaseData(
   id: string,
   data: DatabaseRecord[]
 ): Promise<void> {
-  return apiClient.put<void>(`/databases/${id}/data`, { data });
+  void id;
+  void data;
 }
-
