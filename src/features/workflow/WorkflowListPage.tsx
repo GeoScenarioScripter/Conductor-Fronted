@@ -1,356 +1,218 @@
 import { useMemo, useState } from "react";
-import type { ElementType } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
-  Edit2,
-  Info,
-  Copy,
-  Check,
-  Plus,
-  Layers,
-  Clock,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  CheckCircle2,
-  Archive,
-  PenLine,
+  Edit2, Info, Copy, Check, Plus,
+  Layers, Clock, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { GlassPanel } from "@/components/ui/glass-panel";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { PageHeader } from "@/components/ui/page-header";
 import type { WorkflowSummary, WorkflowStatus } from "./types";
 import { useWorkflows } from "@/hooks/use-workflow";
 
-function extractWorkflowList(raw: any): any[] {
+function extractWorkflowList(raw: unknown): unknown[] {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw;
-
-  const directKeys = ["definitions", "data", "list", "records", "content", "items", "result"];
-  for (const key of directKeys) {
-    if (Array.isArray(raw?.[key])) return raw[key];
+  const r = raw as Record<string, unknown>;
+  for (const key of ["definitions", "data", "list", "records", "content", "items", "result"]) {
+    if (Array.isArray(r[key])) return r[key] as unknown[];
   }
-
-  // one more nested level for common API envelopes like { data: { records: [] } }
-  for (const key of directKeys) {
-    const child = raw?.[key];
-    if (!child || typeof child !== "object") continue;
-    for (const nestedKey of directKeys) {
-      if (Array.isArray(child?.[nestedKey])) return child[nestedKey];
-    }
+  if (typeof r === "object" && (r.workflowDefId || r.workflowName || r.dagDefinition || r.id)) {
+    return [r];
   }
-
-  // single-object fallback: backend may directly return one definition object
-  if (
-    typeof raw === "object" &&
-    (raw.workflowDefId || raw.workflowName || raw.dagDefinition || raw.id)
-  ) {
-    return [raw];
-  }
-
   return [];
 }
 
-const statusColors: Record<WorkflowStatus, string> = {
-  active: "bg-green-500/15 text-green-400 border border-green-500/30",
-  draft: "bg-yellow-500/15 text-yellow-400 border border-yellow-500/30",
-  archived: "bg-muted/50 text-muted-foreground border border-border",
+const gradientByStatus: Record<WorkflowStatus, string> = {
+  active:   "from-sky-500 to-cyan-600",
+  draft:    "from-violet-500 to-purple-700",
+  archived: "from-slate-500 to-slate-700",
 };
 
-const statusIcons: Record<WorkflowStatus, ElementType> = {
-  active: CheckCircle2,
-  draft: PenLine,
-  archived: Archive,
-};
-
-const statusLabels: Record<WorkflowStatus, string> = {
-  active: "Active",
-  draft: "Draft",
-  archived: "Archived",
+const containerVariants = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
+const itemVariants = {
+  hidden: { opacity: 0, y: 10 },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
 };
 
 export default function WorkflowListPage() {
   const { data, isLoading, error } = useWorkflows();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [currentPage,    setCurrentPage]    = useState(1);
+  const [copiedId,       setCopiedId]       = useState<string | null>(null);
   const [detailWorkflow, setDetailWorkflow] = useState<WorkflowSummary | null>(null);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const navigate = useNavigate();
 
   const workflows = useMemo<WorkflowSummary[]>(() => {
-    const list = extractWorkflowList(data);
-
-    const thumbnailByStatus: Record<WorkflowStatus, string> = {
-      active: "bg-gradient-to-br from-cyan-500 to-blue-600",
-      draft: "bg-gradient-to-br from-emerald-400 to-teal-600",
-      archived: "bg-gradient-to-br from-orange-400 to-rose-600",
-    };
-
-    return list.filter(Boolean).map((wf: any) => {
-      const rawStatus = String(wf.status || "").toUpperCase();
+    return extractWorkflowList(data).filter(Boolean).map((wf: any) => {
+      const raw = String(wf.status || "").toUpperCase();
       const status: WorkflowStatus =
-        rawStatus === "ACTIVE" ? "active" : rawStatus === "ARCHIVED" ? "archived" : "draft";
-
+        raw === "ACTIVE" ? "active" : raw === "ARCHIVED" ? "archived" : "draft";
       return {
-        id: String(wf.id ?? wf.workflowDefId ?? ""),
-        name: String(wf.name ?? wf.workflowName ?? "Untitled Workflow"),
+        id:          String(wf.id ?? wf.workflowDefId ?? ""),
+        name:        String(wf.name ?? wf.workflowName ?? "Untitled"),
         description: String(wf.description ?? wf.workflowDescription ?? ""),
         status,
-        nodeCount: Number(wf.nodeCount ?? wf.dagDefinition?.nodes?.length ?? wf.nodes?.length ?? 0),
-        createdAt: wf.createdAt ? String(wf.createdAt).slice(0, 10) : "",
-        updatedAt: wf.updatedAt ? String(wf.updatedAt).slice(0, 10) : "",
-        baseUrl: String(wf.baseUrl ?? wf.workflowDefId ?? ""),
-        thumbnail: thumbnailByStatus[status],
-      };
+        nodeCount:   Number(wf.nodeCount ?? wf.dagDefinition?.nodes?.length ?? 0),
+        createdAt:   wf.createdAt ? String(wf.createdAt).slice(0, 10) : "—",
+        updatedAt:   wf.updatedAt ? String(wf.updatedAt).slice(0, 10) : "—",
+        baseUrl:     String(wf.baseUrl ?? wf.workflowDefId ?? ""),
+        thumbnail:   "",
+      } satisfies WorkflowSummary;
     });
   }, [data]);
 
-  const itemsPerPage = 5; // 5 data cards + 1 add card = 6 grid slots
-  const totalPages = Math.ceil(workflows.length / itemsPerPage);
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentWorkflows = workflows.slice(indexOfFirstItem, indexOfLastItem);
+  const ITEMS = 5;
+  const totalPages = Math.max(1, Math.ceil(workflows.length / ITEMS));
+  const slice = workflows.slice((currentPage - 1) * ITEMS, currentPage * ITEMS);
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) setCurrentPage(newPage);
-  };
-
-  const handleCopyUrl = (wf: WorkflowSummary) => {
+  const handleCopy = (wf: WorkflowSummary) => {
     navigator.clipboard.writeText(wf.baseUrl);
     setCopiedId(wf.id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold tracking-tight text-primary">
-          Workflow Management
-        </h2>
-        <p className="text-muted-foreground">
-          Create and manage your microservice orchestration workflows.
-        </p>
-      </div>
+    <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-6">
+      <motion.div variants={itemVariants}>
+        <PageHeader
+          title="Workflows"
+          subtitle="Visual DAG orchestration for your microservices"
+          actions={
+            <Button size="sm" onClick={() => navigate("/workflow/new")}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              New Workflow
+            </Button>
+          }
+        />
+      </motion.div>
 
-      {isLoading && <div className="text-sm text-muted-foreground">加载工作流列表中...</div>}
-      {error && (
-        <div className="text-sm text-destructive">
-          工作流列表加载失败：{error instanceof Error ? error.message : "未知错误"}
+      {isLoading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {[1,2,3].map(i => <div key={i} className="h-64 rounded-lg bg-muted animate-pulse" />)}
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* New Workflow add card — always first */}
-        <div
-          onClick={() => navigate("/workflow/new")}
-          className="flex flex-col items-center justify-center min-h-[280px] rounded-lg border-2 border-dashed border-border/60 hover:border-primary/70 hover:bg-primary/5 cursor-pointer transition-all duration-300 group"
-        >
-          <div className="h-12 w-12 rounded-full border-2 border-dashed border-border/60 group-hover:border-primary/70 flex items-center justify-center mb-3 transition-colors">
-            <Plus className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
-          </div>
-          <p className="font-semibold text-muted-foreground group-hover:text-primary transition-colors">
-            New Workflow
-          </p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Click to create</p>
-        </div>
+      {error && (
+        <GlassPanel className="p-4 text-sm text-destructive">
+          Failed to load workflows: {error instanceof Error ? error.message : "unknown error"}
+        </GlassPanel>
+      )}
 
-        {/* Paginated workflow cards */}
-        {currentWorkflows.map((wf) => (
-          <Card
-            key={wf.id}
-            className="group overflow-hidden border-border/40 hover:border-primary/50 transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:hover:shadow-[0_8px_30px_rgba(0,240,255,0.1)] bg-card/50 backdrop-blur-sm hover:-translate-y-1"
+      <motion.div variants={itemVariants}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {/* New card */}
+          <motion.div
+            whileHover={{ y: -3 }}
+            onClick={() => navigate("/workflow/new")}
+            className="flex flex-col items-center justify-center min-h-[240px] rounded-lg border-2 border-dashed border-border/50 hover:border-primary/60 hover:bg-primary/5 cursor-pointer transition-all duration-200 group"
           >
-            {/* Thumbnail */}
-            <div className={`h-36 w-full ${wf.thumbnail} relative overflow-hidden`}>
-              <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-all duration-500" />
-              {/* Status badge */}
-              {(() => { const Icon = statusIcons[wf.status]; return (
-              <div className={`absolute top-3 right-3 flex items-center gap-0 group-hover:gap-1.5 px-2 py-1 rounded-full backdrop-blur-sm transition-all duration-300 ${statusColors[wf.status]}`}>
-                <Icon className="h-3 w-3 flex-shrink-0" />
-                <span className="overflow-hidden max-w-0 group-hover:max-w-[80px] text-xs font-semibold whitespace-nowrap transition-all duration-300">
-                  {statusLabels[wf.status]}
-                </span>
-              </div>
-              ); })()}
-              {/* Name + ID overlay */}
-              <div className="absolute bottom-0 left-0 p-4 w-full bg-gradient-to-t from-black/80 to-transparent">
-                <h3 className="text-white font-bold text-lg tracking-tight drop-shadow-md">
-                  {wf.name}
-                </h3>
-                <p className="font-mono text-xs text-white/60 mt-0.5">
-                  {wf.id.slice(0, 14)}...
-                </p>
-              </div>
+            <div className="h-10 w-10 rounded-full border-2 border-dashed border-border/50 group-hover:border-primary/60 flex items-center justify-center mb-3 transition-colors">
+              <Plus className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
             </div>
+            <p className="text-sm font-semibold text-muted-foreground group-hover:text-primary transition-colors">
+              New Workflow
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Create from scratch</p>
+          </motion.div>
 
-            <CardContent className="p-5">
-              {/* Info grid */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="flex flex-col gap-1.5 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors border border-border/50">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase font-semibold tracking-wider">
-                    <Layers className="h-3.5 w-3.5" />
-                    Nodes
+          {slice.map(wf => (
+            <motion.div key={wf.id} whileHover={{ y: -3 }}>
+              <GlassPanel className="overflow-hidden hover:border-primary/30 transition-all duration-200 h-full flex flex-col">
+                {/* Gradient header */}
+                <div className={`h-28 bg-gradient-to-br ${gradientByStatus[wf.status]} relative`}>
+                  <div className="absolute inset-0 bg-black/30" />
+                  <div className="absolute top-3 right-3">
+                    <StatusBadge status={wf.status} size="sm" />
                   </div>
-                  <span className="font-mono text-sm font-medium text-foreground">
-                    {wf.nodeCount} Services
-                  </span>
-                </div>
-                <div className="flex flex-col gap-1.5 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors border border-border/50">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase font-semibold tracking-wider">
-                    <Clock className="h-3.5 w-3.5" />
-                    Updated
+                  <div className="absolute bottom-0 left-0 p-4 w-full bg-gradient-to-t from-black/70 to-transparent">
+                    <h3 className="text-white font-semibold text-base leading-tight">{wf.name}</h3>
+                    <p className="text-white/50 font-mono text-[10px] mt-0.5 truncate">{wf.id.slice(0, 16)}…</p>
                   </div>
-                  <span className="font-mono text-sm font-medium text-foreground">
-                    {wf.updatedAt}
-                  </span>
                 </div>
-              </div>
 
-              {/* Action buttons */}
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  className="flex-1 gap-1.5"
-                  onClick={() => navigate(`/workflow/${wf.id}/edit`)}
-                >
-                  <Edit2 className="h-3.5 w-3.5" />
-                  Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="flex-1 gap-1.5"
-                  onClick={() => { setDetailWorkflow(wf); setIsDetailOpen(true); }}
-                >
-                  <Info className="h-3.5 w-3.5" />
-                  Details
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 px-3"
-                  onClick={() => handleCopyUrl(wf)}
-                  title="Copy base URL"
-                >
-                  {copiedId === wf.id
-                    ? <Check className="h-3.5 w-3.5 text-green-500" />
-                    : <Copy className="h-3.5 w-3.5" />}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                {/* Body */}
+                <div className="p-4 flex-1 flex flex-col gap-3">
+                  {wf.description && (
+                    <p className="text-xs text-muted-foreground line-clamp-2">{wf.description}</p>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Layers className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>{wf.nodeCount} nodes</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>{wf.updatedAt}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 mt-auto">
+                    <Button size="sm" className="flex-1 h-7 text-xs gap-1" onClick={() => navigate(`/workflow/${wf.id}/edit`)}>
+                      <Edit2 className="h-3 w-3" /> Edit
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setDetailWorkflow(wf)}>
+                      <Info className="h-3 w-3" />
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => handleCopy(wf)}>
+                      {copiedId === wf.id ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                </div>
+              </GlassPanel>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
 
       {!isLoading && !error && workflows.length === 0 && (
-        <div className="space-y-2">
-          <div className="text-sm text-muted-foreground">
-            暂无工作流数据（接口已请求：`/api/workflow/definitions`）。
-          </div>
-          {import.meta.env.DEV && data && (
-            <pre className="max-h-56 overflow-auto rounded border bg-muted/30 p-3 text-[11px] text-foreground/80">
-              {JSON.stringify(data, null, 2)}
-            </pre>
-          )}
-        </div>
+        <motion.div variants={itemVariants}>
+          <GlassPanel className="p-8 text-center">
+            <p className="text-sm text-muted-foreground">No workflows yet. Create your first workflow to get started.</p>
+          </GlassPanel>
+        </motion.div>
       )}
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-end space-x-2 py-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Previous
+        <motion.div variants={itemVariants} className="flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+            <ChevronLeft className="h-4 w-4" /> Prev
           </Button>
-          <div className="text-sm font-medium">
-            Page {currentPage} of {totalPages}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-          >
-            Next
-            <ChevronRight className="h-4 w-4" />
+          <span className="text-xs text-muted-foreground">{currentPage} / {totalPages}</span>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+            Next <ChevronRight className="h-4 w-4" />
           </Button>
-        </div>
+        </motion.div>
       )}
 
-      {/* Detail Dialog */}
-      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+      {/* Detail dialog */}
+      <Dialog open={!!detailWorkflow} onOpenChange={o => !o && setDetailWorkflow(null)}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{detailWorkflow?.name}</DialogTitle>
             <DialogDescription>{detailWorkflow?.description}</DialogDescription>
           </DialogHeader>
-
           {detailWorkflow && (
-            <div className="space-y-3 py-2">
-              <div className="rounded-md border bg-muted/30 p-3 space-y-2.5 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">ID</span>
-                  <span className="font-mono text-xs">{detailWorkflow.id}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusColors[detailWorkflow.status]}`}>
-                    {statusLabels[detailWorkflow.status]}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Layers className="h-3.5 w-3.5" /> Nodes
-                  </span>
-                  <span className="font-mono">{detailWorkflow.nodeCount} Services</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5" /> Created
-                  </span>
-                  <span className="font-mono">{detailWorkflow.createdAt}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5" /> Updated
-                  </span>
-                  <span className="font-mono">{detailWorkflow.updatedAt}</span>
-                </div>
-              </div>
-
-              <div className="rounded-md border bg-muted/30 p-3 space-y-1.5">
-                <p className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">Base URL</p>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs flex-1 truncate text-foreground">
-                    {detailWorkflow.baseUrl}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 shrink-0"
-                    onClick={() => handleCopyUrl(detailWorkflow)}
-                  >
-                    {copiedId === detailWorkflow.id
-                      ? <Check className="h-3.5 w-3.5 text-green-500" />
-                      : <Copy className="h-3.5 w-3.5" />}
-                  </Button>
-                </div>
+            <div className="space-y-3 py-1">
+              <div className="rounded-md border bg-muted/30 p-3 space-y-2 text-sm">
+                {[
+                  ["ID",      detailWorkflow.id],
+                  ["Nodes",   `${detailWorkflow.nodeCount}`],
+                  ["Created", detailWorkflow.createdAt],
+                  ["Updated", detailWorkflow.updatedAt],
+                ].map(([label, val]) => (
+                  <div key={label} className="flex justify-between">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-mono text-xs">{val}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </motion.div>
   );
 }

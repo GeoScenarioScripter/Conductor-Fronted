@@ -13,11 +13,11 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 222.2 47.4% 11.2%;
+    --primary: 189 85% 42%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 258 75% 55%;
+    --secondary-foreground: 210 40% 98%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
@@ -25,62 +25,72 @@
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
 
+    --success: 160 84% 35%;
+    --warning: 38 92% 45%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 189 85% 42%;
 
     --radius: 0.5rem;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary: 189 85% 42%;
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-ring: 189 85% 42%;
   }
 
   .dark {
-    --background: 240 10% 3.9%; /* #0a0a0f */
-    --foreground: 0 0% 98%;
+    /* ── Backgrounds ── */
+    --background: 210 45% 5%;        /* #071018 */
+    --card: 212 40% 8%;              /* #0B1220 */
+    --popover: 212 40% 10%;          /* #101827 */
 
-    --card: 240 10% 6%; /* Slightly lighter than bg */
-    --card-foreground: 0 0% 98%;
+    /* ── Foreground ── */
+    --foreground: 210 60% 93%;       /* #E6F1FF */
+    --card-foreground: 210 60% 93%;
+    --popover-foreground: 210 60% 93%;
 
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    /* ── Primary: Cyan ── */
+    --primary: 189 85% 52%;          /* #22D3EE */
+    --primary-foreground: 210 45% 5%;
 
-    --primary: 180 100% 50%; /* #00f0ff Cyan */
-    --primary-foreground: 240 5.9% 10%;
-
-    --secondary: 266 100% 60%; /* #8a2be2 Violet/Purple */
+    /* ── Secondary: Violet ── */
+    --secondary: 258 90% 65%;        /* #8B5CF6 */
     --secondary-foreground: 0 0% 98%;
 
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-
-    --destructive: 0 62.8% 30.6%;
+    /* ── Semantic ── */
+    --success: 160 84% 39%;          /* #10B981 */
+    --warning: 38 92% 50%;           /* #F59E0B */
+    --destructive: 0 84% 60%;        /* #EF4444 */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 180 100% 50%;
+    /* ── Neutral ── */
+    --muted: 210 30% 14%;            /* #161F2E */
+    --muted-foreground: 215 20% 55%; /* #7C8AA5 */
+    --accent: 210 30% 14%;
+    --accent-foreground: 210 60% 93%;
 
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* ── Border / Input ── */
+    --border: 210 25% 18%;           /* #1E2D3D */
+    --input: 210 25% 18%;
+    --ring: 189 85% 52%;
+
+    /* ── Sidebar ── */
+    --sidebar-background: 212 40% 7%;
+    --sidebar-foreground: 210 60% 93%;
+    --sidebar-border: 210 25% 15%;
+    --sidebar-primary: 189 85% 52%;
+    --sidebar-primary-foreground: 210 45% 5%;
+    --sidebar-accent: 210 30% 14%;
+    --sidebar-accent-foreground: 210 60% 93%;
+    --sidebar-ring: 189 85% 52%;
   }
 }
 
@@ -93,10 +103,10 @@
   }
 }
 
-/* Custom Scrollbar for Tech Feel */
+/* ── Scrollbar ── */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -104,10 +114,74 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted));
-  border-radius: 4px;
+  background: hsl(var(--border));
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.6);
+}
+
+/* ── Custom Keyframes ── */
+@keyframes scan-line {
+  0%   { top: 0%;   opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes flow-dash {
+  0%   { stroke-dashoffset: 20; }
+  100% { stroke-dashoffset: 0; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1; }
+}
+
+@keyframes fade-up {
+  0%   { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Ambient orb float animation (Hub page background) ── */
+@keyframes float-orb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(10px, -14px) scale(1.05); }
+  66%       { transform: translate(-8px, 9px) scale(0.96); }
+}
+
+@layer utilities {
+  .animate-float-orb {
+    animation: float-orb 14s ease-in-out infinite;
+  }
+  .animate-float-orb-delayed {
+    animation: float-orb 18s ease-in-out infinite reverse;
+    animation-delay: -6s;
+  }
+}
+
+/* ── Node scan-line helper (CSS class for ReactFlow nodes) ── */
+.node-scanning::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, hsl(189 85% 52%), transparent);
+  animation: scan-line 1.8s linear infinite;
+  pointer-events: none;
+  z-index: 10;
+  border-radius: 1px;
 }
